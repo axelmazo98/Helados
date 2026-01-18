@@ -1,0 +1,918 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Helados - Venta/Stock/Cierre</title>
+<style>
+body{font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif;margin:14px;background:#f6f7fb;color:#111}
+h1{margin:0 0 6px;font-size:20px}
+.sub{margin:0 0 10px;color:#444;font-size:13px}
+.nav{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 12px}
+button,input,select,textarea{font:inherit;border:1px solid #d7dbe8;border-radius:12px;padding:9px 10px;background:#fff}
+button{cursor:pointer;font-weight:800}
+button.primary{background:#111;border-color:#111;color:#fff}
+button.secondary{background:#fff;color:#111}
+button.danger{background:#b00020;border-color:#b00020;color:#fff}
+.nav button.active{background:#111;border-color:#111;color:#fff}
+.card{background:#fff;border:1px solid #e6e8f0;border-radius:14px;padding:12px;box-shadow:0 1px 2px rgba(0,0,0,.04)}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.muted{color:#666;font-size:12px}
+.right{text-align:right}
+.pill{display:inline-block;padding:3px 9px;border-radius:999px;font-size:12px;border:1px solid #ddd;background:#fafafa}
+.pill.warn{border-color:#f2c94c;background:#fff7db}
+.pill.bad{border-color:#ff6b6b;background:#ffe3e3}
+.thumb{width:46px;height:46px;border-radius:12px;border:1px solid #e6e8f0;object-fit:cover;background:#fafafa}
+.list{display:flex;flex-direction:column;gap:10px}
+.item{border:1px solid #eef0f6;border-radius:14px;padding:10px;background:#fff}
+.itemTop{display:flex;gap:10px;align-items:center;justify-content:space-between}
+.itemL{display:flex;gap:10px;align-items:center;min-width:0}
+.name{font-weight:900;font-size:13px;margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:55vw}
+.meta{margin:2px 0 0;color:#555;font-size:12px}
+.badge{display:inline-block;padding:2px 8px;border-radius:999px;border:1px solid #ddd;background:#fafafa;font-size:12px;font-weight:900}
+.btns{display:flex;gap:8px;margin-top:8px}
+.btns button{flex:1;padding:10px 0}
+.totalBox{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:12px;padding-top:10px;border-top:1px solid #eef0f6}
+.bigConfirm{width:100%;max-width:420px;margin:10px auto 0;display:block;padding:14px 10px;font-size:16px;border-radius:16px}
+.smallCancel{display:block;margin:6px auto 0;background:transparent;border:none;color:#555;font-weight:800}
+table{width:100%;border-collapse:collapse}
+th,td{border-bottom:1px solid #eef0f6;padding:8px 6px;text-align:left;font-size:13px}
+th{color:#444;font-weight:900}
+dialog::backdrop{background:rgba(0,0,0,.35)}
+dialog{border:none;border-radius:16px;padding:0;max-width:980px;width:calc(100% - 24px)}
+.dlgInner{padding:12px}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono",monospace}
+.qrBox{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+.qrBox canvas{border:1px solid #e6e8f0;border-radius:12px;background:#fff}
+.pedidoBtns{display:flex;gap:8px}
+.pedidoBtns button{padding:8px 10px;border-radius:12px}
+hr{border:none;border-top:1px solid #eef0f6;margin:12px 0}
+</style>
+</head>
+<body>
+
+<h1>Helados</h1>
+<p class="sub">Venta tipo caja, Stock y Cierre. Guarda en el navegador. QR por producto.</p>
+
+<div class="nav">
+  <button id="tabVenta" class="active">Venta</button>
+  <button id="tabStock">Stock</button>
+  <button id="tabCierre">Cierre</button>
+  <span class="muted" id="savedState" style="align-self:center;"></span>
+</div>
+
+<section id="secVenta">
+  <div class="card">
+    <div class="row" style="justify-content:space-between;gap:10px">
+      <div class="row" style="gap:8px">
+        <span class="pill">Jornada: <b id="ventaJornada"></b></span>
+        <span class="pill">Items: <b id="ventaItems">0</b></span>
+      </div>
+      <div class="row" style="gap:8px">
+        <button class="secondary" id="btnScan">Escanear QR</button>
+        <button class="secondary" id="btnUndo">Deshacer última</button>
+      </div>
+    </div>
+
+    <div class="row" style="justify-content:space-between;margin:10px 0">
+      <div class="row">
+        <label style="margin:0"><span class="muted">Mostrar</span><br/>
+          <select id="ventaFiltro">
+            <option value="en_stock">Solo en stock</option>
+            <option value="todos">Todos</option>
+          </select>
+        </label>
+        <label style="margin:0"><span class="muted">Buscar</span><br/>
+          <input id="ventaBuscar" placeholder="Ej: chocolate"/>
+        </label>
+      </div>
+      <span class="muted">Cada helado muestra cantidad y subtotal.</span>
+    </div>
+
+    <div id="ventaList" class="list"></div>
+
+    <div class="card" style="margin-top:12px">
+      <h3 style="margin:0 0 8px;font-size:14px">Pedido actual</h3>
+      <div id="pedidoList" class="list"></div>
+      <div class="row" style="justify-content:space-between;margin-top:10px">
+        <span class="pill">Total: <b id="pedidoTotal">$0</b></span>
+        <span class="muted">Confirmar registra la venta.</span>
+      </div>
+    </div>
+
+    <button class="primary bigConfirm" id="btnConfirm">CONFIRMAR VENTA</button>
+    <button class="smallCancel" id="btnCancel">Cancelar</button>
+
+    <div class="muted" style="margin-top:10px">
+      Nota: para escanear cámara, abrí esto por <b>http/https</b> o <b>localhost</b>. En <b>content://</b> suele bloquear.
+    </div>
+  </div>
+</section>
+
+<section id="secStock" style="display:none">
+  <div class="card">
+    <div class="row" style="justify-content:space-between">
+      <h2 style="margin:0;font-size:15px">Stock</h2>
+      <div class="row">
+        <button class="secondary" id="btnExportFile">Exportar (archivo)</button>
+        <button class="secondary" id="btnImportFile">Importar (archivo)</button>
+        <button class="secondary" id="btnAddProduct">Agregar producto</button>
+      </div>
+    </div>
+    <p class="muted" style="margin:6px 0 10px">
+      Exporta/Importa un JSON (backup). Cargás sabores, foto, mínimos y generás QR.
+    </p>
+    <input id="fileImport" type="file" accept="application/json" style="display:none"/>
+
+    <div style="overflow:auto">
+      <table id="stockTable">
+        <thead>
+          <tr>
+            <th>Producto</th>
+            <th class="right">Stock</th>
+            <th class="right">Precio</th>
+            <th class="right">Mín</th>
+            <th>Alerta</th>
+            <th class="right">Acciones</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <div class="row" style="margin-top:10px">
+      <button class="danger" id="btnReset">Borrar todo</button>
+      <span class="muted">Esto borra productos, stock y jornadas.</span>
+    </div>
+  </div>
+</section>
+
+<section id="secCierre" style="display:none">
+  <div class="card">
+    <div class="row" style="justify-content:space-between">
+      <h2 style="margin:0;font-size:15px">Cierre</h2>
+      <div class="row">
+        <label style="margin:0"><span class="muted">Día</span><br/>
+          <select id="selDia"></select>
+        </label>
+        <button class="secondary" id="btnExportCierre">Guardar cierre (PDF)</button>
+        <button class="secondary" id="btnNewDay">Nueva jornada</button>
+      </div>
+    </div>
+
+    <div id="cierreResumen" style="margin-top:10px"></div>
+
+    <h3 style="margin:14px 0 8px;font-size:14px">Movimientos (día seleccionado)</h3>
+    <div style="overflow:auto;max-height:420px">
+      <table id="movTable">
+        <thead>
+          <tr>
+            <th>Hora</th><th>Tipo</th><th>Producto</th>
+            <th class="right">Cant</th><th class="right">Unit</th><th class="right">Total</th>
+            <th class="muted">Grupo</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<dialog id="dlgProduct">
+  <div class="dlgInner card">
+    <h2 style="margin:0 0 10px;font-size:15px" id="dlgProductTitle">Producto</h2>
+
+    <div class="row" style="align-items:flex-end">
+      <div><label>Nombre</label><input id="pName" placeholder="Ej: Chocolate"/></div>
+      <div><label>Precio (ARS)</label><input id="pPrice" type="number" min="0" step="0.01"/></div>
+      <div><label>Stock</label><input id="pStock" type="number" min="0" step="1"/></div>
+      <div><label>Stock mín.</label><input id="pMin" type="number" min="0" step="1"/></div>
+      <div><label>Foto</label><input id="pPhoto" type="file" accept="image/*"/></div>
+    </div>
+
+    <div class="row" style="margin-top:10px;justify-content:space-between">
+      <div class="row">
+        <button class="secondary" id="btnProdCancel">Cancelar</button>
+        <button class="primary" id="btnProdSave">Guardar</button>
+        <button class="danger" id="btnProdDelete" style="display:none">Eliminar</button>
+      </div>
+      <span class="muted">Foto se guarda en el navegador.</span>
+    </div>
+
+    <hr>
+
+    <div class="row" style="justify-content:space-between">
+      <div>
+        <div class="muted" style="margin-bottom:6px">QR del producto</div>
+        <div class="qrBox">
+          <div id="qrOut"></div>
+          <div>
+            <div class="muted">Contenido</div>
+            <div class="mono" id="qrText" style="font-size:12px;word-break:break-all"></div>
+            <div class="row" style="margin-top:8px">
+              <button class="secondary" id="btnPrintQr">Imprimir QR</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <img id="pPreview" class="thumb" alt="preview" style="width:70px;height:70px;display:none">
+    </div>
+  </div>
+</dialog>
+
+<dialog id="dlgScan">
+  <div class="dlgInner card">
+    <div class="row" style="justify-content:space-between">
+      <h2 style="margin:0;font-size:15px">Escanear QR</h2>
+      <button class="secondary" id="btnScanClose">Cerrar</button>
+    </div>
+    <p class="muted" style="margin:8px 0 10px">
+      Permití cámara. Escanear suma +1 al pedido.
+    </p>
+    <div id="qrReader" style="width:100%"></div>
+    <p class="muted" id="scanStatus" style="margin:10px 0 0"></p>
+  </div>
+</dialog>
+
+<script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+<script src="https://unpkg.com/html5-qrcode@2.3.10/html5-qrcode.min.js"></script>
+
+<script>
+(()=>{const KEY="helados_v5",$=id=>document.getElementById(id);
+const fmt=new Intl.NumberFormat("es-AR",{style:"currency",currency:"ARS",maximumFractionDigits:2});
+const dateKey=(d=new Date())=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+const timeShort=iso=>{const d=new Date(iso);return `${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;}
+const uid=()=>Math.random().toString(16).slice(2)+"-"+Date.now().toString(16);
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const def=()=>({version:5,jornadaActual:dateKey(),productos:[],jornadas:{},lastConfirmedGroupId:null});
+let state=load(),cart=new Map(),editingProductId=null,qrScanner=null,viewDay=null;
+
+function load(){
+  try{
+    const raw=localStorage.getItem(KEY);
+    if(!raw) return def();
+    const st=JSON.parse(raw)||def();
+    st.jornadaActual??=dateKey(); st.productos??=[]; st.jornadas??={}; st.lastConfirmedGroupId??=null;
+    return st;
+  }catch{ return def(); }
+}
+function save(){
+  localStorage.setItem(KEY,JSON.stringify(state));
+  $("savedState").textContent=`Guardado: ${new Date().toLocaleString("es-AR")}`;
+}
+function ensureJ(day=state.jornadaActual){ state.jornadas[day]??={ventas:0,costos:0,movimientos:[]}; }
+function getP(id){ return state.productos.find(p=>p.id===id); }
+function alertOf(p){
+  if(p.stock<=0) return{txt:"Sin stock",cls:"pill bad"};
+  if(p.stock<=p.stockMin) return{txt:"Reponer",cls:"pill warn"};
+  return{txt:"OK",cls:"pill"};
+}
+function downloadJSON(filename,obj){
+  const blob=new Blob([JSON.stringify(obj,null,2)],{type:"application/json"});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a"); a.href=url; a.download=filename;
+  document.body.appendChild(a); a.click();
+  setTimeout(()=>{URL.revokeObjectURL(url);a.remove();},0);
+}
+async function readJSONFile(file){ const txt=await file.text(); return JSON.parse(txt); }
+
+function nav(tab){
+  [["Venta","secVenta","tabVenta"],["Stock","secStock","tabStock"],["Cierre","secCierre","tabCierre"]].forEach(([t,s,b])=>{
+    $(s).style.display=(t===tab)?"":"none";
+    $(b).classList.toggle("active",t===tab);
+  });
+  renderAll();
+}
+function renderVenta(){
+  ensureJ();
+  $("ventaJornada").textContent=state.jornadaActual;
+
+  const filtro=$("ventaFiltro").value;
+  const q=$("ventaBuscar").value.trim().toLowerCase();
+
+  const items=state.productos.slice().sort((a,b)=>a.nombre.localeCompare(b.nombre,"es"))
+    .filter(p=>filtro==="todos"?true:p.stock>0)
+    .filter(p=>!q?true:p.nombre.toLowerCase().includes(q));
+
+  // Totales del pedido
+  let total=0,count=0;
+  for(const [pid,qty] of cart.entries()){
+    const p=getP(pid); if(!p) continue;
+    total+=p.precioVenta*qty; count+=qty;
+  }
+  $("ventaItems").textContent=String(count);
+  $("pedidoTotal").textContent=fmt.format(total);
+
+  const list=$("ventaList");
+  if(!items.length){
+    list.innerHTML=`<div class="muted">No hay productos para mostrar. Cargalos en Stock.</div>`;
+    return;
+  }
+
+  list.innerHTML=items.map(p=>{
+    const a=alertOf(p);
+    const qty=cart.get(p.id)||0;
+    const sub=p.precioVenta*qty;
+    const img=p.photoDataUrl?`<img class="thumb" src="${p.photoDataUrl}" alt="foto">`:`<div class="thumb"></div>`;
+    return `<div class="item">
+      <div class="itemTop">
+        <div class="itemL">${img}<div style="min-width:0">
+          <p class="name">${esc(p.nombre)}</p>
+          <div class="meta">${fmt.format(p.precioVenta)} · Stock: <b>${p.stock}</b> · <span class="${a.cls}">${a.txt}</span></div>
+          <div class="meta">En pedido: <span class="badge">${qty}</span> · Subtotal: <b>${fmt.format(sub)}</b></div>
+        </div></div>
+      </div>
+      <div class="btns">
+        <button data-add="1" data-id="${p.id}">+1</button>
+        <button data-add="2" data-id="${p.id}">+2</button>
+        <button data-add="3" data-id="${p.id}">+3</button>
+      </div>
+    </div>`;
+  }).join("");
+
+  list.querySelectorAll("[data-add]").forEach(b=>b.onclick=()=>addToCart(b.dataset.id,Number(b.dataset.add)));
+}
+
+function renderPedido(){
+  let total=0;
+  const rows=[];
+  for(const [pid,qty] of cart.entries()){
+    const p=getP(pid); if(!p) continue;
+    const sub=p.precioVenta*qty;
+    total+=sub;
+    rows.push({id:p.id,nombre:p.nombre,qty,unit:p.precioVenta,sub});
+  }
+  rows.sort((a,b)=>a.nombre.localeCompare(b.nombre,"es"));
+
+  const box=$("pedidoList");
+  if(!rows.length){
+    box.innerHTML=`<div class="muted">Pedido vacío. Tocá +1/+2/+3 o escaneá.</div>`;
+    $("pedidoTotal").textContent=fmt.format(0);
+    return;
+  }
+
+  box.innerHTML = rows.map(r=>`
+    <div class="item" style="padding:10px">
+      <div class="row" style="justify-content:space-between;align-items:flex-start">
+        <div style="min-width:0">
+          <b style="display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:60vw">${esc(r.nombre)}</b>
+          <div class="muted">${fmt.format(r.unit)} c/u</div>
+        </div>
+        <div class="right">
+          <div><b>x${r.qty}</b></div>
+          <div class="muted">${fmt.format(r.sub)}</div>
+        </div>
+      </div>
+
+      <div class="row" style="justify-content:space-between;margin-top:8px">
+        <div class="pedidoBtns">
+          <button class="secondary" data-pm="-1" data-id="${r.id}">-1</button>
+          <button class="secondary" data-pm="1" data-id="${r.id}">+1</button>
+        </div>
+        <button class="secondary" data-del="${r.id}">Quitar</button>
+      </div>
+    </div>
+  `).join("");
+
+  box.querySelectorAll("[data-pm]").forEach(b=>b.onclick=()=>addToCart(b.dataset.id,Number(b.dataset.pm)));
+  box.querySelectorAll("[data-del]").forEach(b=>b.onclick=()=>{cart.delete(b.dataset.del); renderAll();});
+
+  $("pedidoTotal").textContent = fmt.format(total);
+}
+
+function renderStock(){
+  const tbody=$("stockTable").querySelector("tbody");
+  if(!state.productos.length){
+    tbody.innerHTML=`<tr><td colspan="6" class="muted">No hay productos.</td></tr>`;
+    return;
+  }
+
+  const items=state.productos.slice().sort((a,b)=>a.nombre.localeCompare(b.nombre,"es"));
+  tbody.innerHTML=items.map(p=>{
+    const a=alertOf(p);
+    const img=p.photoDataUrl?`<img class="thumb" src="${p.photoDataUrl}" alt="foto">`:`<div class="thumb"></div>`;
+    return `<tr>
+      <td>
+        <div class="row" style="gap:10px">
+          ${img}
+          <div><b>${esc(p.nombre)}</b><br/><span class="muted mono">${esc(p.id)}</span></div>
+        </div>
+      </td>
+      <td class="right">${p.stock}</td>
+      <td class="right">${fmt.format(p.precioVenta)}</td>
+      <td class="right">${p.stockMin}</td>
+      <td><span class="${a.cls}">${a.txt}</span></td>
+      <td class="right">
+        <button class="secondary" data-edit="${p.id}" style="padding:7px 10px">Editar/QR</button>
+        <button class="secondary" data-repo="${p.id}" style="padding:7px 10px">Reponer</button>
+      </td>
+    </tr>`;
+  }).join("");
+
+  tbody.querySelectorAll("[data-edit]").forEach(b=>b.onclick=()=>openProductDialog(b.dataset.edit));
+  tbody.querySelectorAll("[data-repo]").forEach(b=>b.onclick=()=>quickRestock(b.dataset.repo));
+}
+
+function fillDays(){
+  const keys=Object.keys(state.jornadas||{}).sort().reverse();
+  const sel=$("selDia");
+  sel.innerHTML = keys.length ? keys.map(k=>`<option value="${k}">${k}</option>`).join("")
+                              : `<option value="${state.jornadaActual}">${state.jornadaActual}</option>`;
+  if(!viewDay) viewDay = state.jornadaActual;
+  if(keys.includes(viewDay)) sel.value=viewDay;
+  else { viewDay=state.jornadaActual; sel.value=viewDay; }
+}
+
+function renderCierre(){
+  ensureJ();
+  fillDays();
+
+  const day=viewDay||state.jornadaActual;
+  ensureJ(day);
+  const j=state.jornadas[day];
+
+  const rep=state.productos.filter(p=>p.stock<=p.stockMin).length;
+
+  $("cierreResumen").innerHTML=`
+    <div class="row" style="gap:8px;flex-wrap:wrap">
+      <span class="pill">Jornada: <b>${day}</b></span>
+      <span class="pill">Ventas: <b>${fmt.format(j.ventas)}</b></span>
+      <span class="pill">Costos: <b>${fmt.format(j.costos)}</b></span>
+      <span class="pill">Ganancia est.: <b>${fmt.format(j.ventas-j.costos)}</b></span>
+      <span class="pill ${rep?"warn":""}">A reponer (hoy): <b>${rep}</b></span>
+    </div>
+    <p class="muted" style="margin:10px 0 0">El historial se guarda en “jornadas”. Podés exportar el cierre a PDF.</p>
+  `;
+
+  const tbody=$("movTable").querySelector("tbody");
+  const movs=(j.movimientos||[]).slice().reverse();
+
+  tbody.innerHTML = movs.length ? movs.map(m=>`
+    <tr>
+      <td>${timeShort(m.ts)}</td>
+      <td>${esc(m.tipo)}</td>
+      <td>${esc(m.nombre)}</td>
+      <td class="right">${m.cantidad}</td>
+      <td class="right">${fmt.format(m.unit)}</td>
+      <td class="right">${fmt.format(m.total)}</td>
+      <td class="muted mono">${esc(m.grupo||"")}</td>
+    </tr>
+  `).join("") : `<tr><td colspan="7" class="muted">Sin movimientos ese día.</td></tr>`;
+}
+
+function renderAll(){
+  renderVenta();
+  renderPedido();
+  renderStock();
+  renderCierre();
+  save();
+}
+
+function addToCart(pid,delta){
+  const p=getP(pid); if(!p) return;
+  const cur=cart.get(pid)||0;
+  const next=cur+delta;
+
+  if(next<=0){ cart.delete(pid); renderAll(); return; }
+  if(next>p.stock){ alert(`Stock insuficiente de "${p.nombre}". Stock: ${p.stock}`); return; }
+
+  cart.set(pid,next);
+  renderAll();
+}
+
+function cancelCart(){ cart.clear(); renderAll(); }
+
+function confirmSale(){
+  if(!cart.size){ alert("Pedido vacío."); return; }
+
+  for(const [pid,qty] of cart.entries()){
+    const p=getP(pid);
+    if(!p) return alert("Producto no encontrado.");
+    if(p.stock<qty) return alert(`Stock insuficiente de "${p.nombre}". Stock: ${p.stock}`);
+  }
+
+  ensureJ();
+  const j=state.jornadas[state.jornadaActual];
+  const groupId="V-"+uid();
+
+  for(const [pid,qty] of cart.entries()){
+    const p=getP(pid);
+    p.stock-=qty;
+    const total=p.precioVenta*qty;
+    j.ventas+=total;
+    j.movimientos.push({
+      ts:new Date().toISOString(),
+      tipo:"Venta",
+      productoId:p.id,
+      nombre:p.nombre,
+      cantidad:qty,
+      unit:p.precioVenta,
+      total,
+      grupo:groupId
+    });
+  }
+
+  state.lastConfirmedGroupId=groupId;
+  cart.clear();
+  renderAll();
+}
+
+function undoLast(){
+  const gid=state.lastConfirmedGroupId;
+  if(!gid){ alert("No hay venta reciente para deshacer."); return; }
+
+  ensureJ();
+  const j=state.jornadas[state.jornadaActual];
+
+  const idxs=[];
+  for(let i=0;i<j.movimientos.length;i++){
+    if(j.movimientos[i].grupo===gid && j.movimientos[i].tipo==="Venta") idxs.push(i);
+  }
+  if(!idxs.length){
+    alert("No se encontró la venta.");
+    state.lastConfirmedGroupId=null;
+    save();
+    return;
+  }
+
+  for(let k=idxs.length-1;k>=0;k--){
+    const i=idxs[k];
+    const m=j.movimientos[i];
+    const p=getP(m.productoId);
+    if(p) p.stock+=m.cantidad;
+    j.ventas-=m.total;
+    j.movimientos.splice(i,1);
+  }
+
+  state.lastConfirmedGroupId=null;
+  renderAll();
+}
+async function fileToDataUrl(file){
+  return new Promise((res,rej)=>{
+    const fr=new FileReader();
+    fr.onload=()=>res(fr.result);
+    fr.onerror=rej;
+    fr.readAsDataURL(file);
+  });
+}
+
+function openProductDialog(id=null){
+  editingProductId=id;
+  const isEdit=!!id;
+
+  $("dlgProductTitle").textContent=isEdit?"Editar producto":"Agregar producto";
+  $("btnProdDelete").style.display=isEdit?"":"none";
+
+  $("pName").value="";
+  $("pPrice").value="";
+  $("pStock").value="";
+  $("pMin").value="";
+  $("pPhoto").value="";
+  $("pPreview").style.display="none";
+
+  $("qrOut").innerHTML="";
+  $("qrText").textContent="";
+
+  if(isEdit){
+    const p=getP(id); if(!p) return;
+    $("pName").value=p.nombre;
+    $("pPrice").value=p.precioVenta;
+    $("pStock").value=p.stock;
+    $("pMin").value=p.stockMin;
+    if(p.photoDataUrl){ $("pPreview").src=p.photoDataUrl; $("pPreview").style.display=""; }
+    renderQR(p);
+  }
+
+  $("dlgProduct").showModal();
+}
+
+function renderQR(p){
+  const payload=`HELADO:${p.id}`;
+  $("qrText").textContent=payload;
+  $("qrOut").innerHTML="";
+  new QRCode($("qrOut"),{text:payload,width:160,height:160});
+}
+
+async function saveProduct(){
+  const nombre=$("pName").value.trim();
+  const precio=Number($("pPrice").value);
+  const stock=Math.floor(Number($("pStock").value));
+  const min=Math.floor(Number($("pMin").value));
+  const file=$("pPhoto").files && $("pPhoto").files[0];
+
+  if(!nombre) return alert("Nombre requerido.");
+  if(!Number.isFinite(precio)||precio<0) return alert("Precio inválido.");
+  if(!Number.isFinite(stock)||stock<0) return alert("Stock inválido.");
+  if(!Number.isFinite(min)||min<0) return alert("Mínimo inválido.");
+
+  const dup=state.productos.find(p=>p.nombre.toLowerCase()===nombre.toLowerCase() && p.id!==editingProductId);
+  if(dup) return alert("Ya existe un producto con ese nombre.");
+
+  let photoDataUrl=null;
+  if(file) photoDataUrl=await fileToDataUrl(file);
+
+  if(editingProductId){
+    const p=getP(editingProductId); if(!p) return alert("Producto no encontrado.");
+    p.nombre=nombre;
+    p.precioVenta=precio;
+    p.stock=stock;
+    p.stockMin=min;
+    if(photoDataUrl) p.photoDataUrl=photoDataUrl;
+    renderQR(p);
+  }else{
+    const p={id:uid(),nombre,precioVenta:precio,stock,stockMin:min,photoDataUrl:photoDataUrl||null};
+    state.productos.push(p);
+    renderQR(p);
+  }
+
+  renderAll();
+  $("dlgProduct").close();
+}
+
+function deleteProduct(){
+  if(!editingProductId) return;
+  const p=getP(editingProductId); if(!p) return;
+  if(!confirm(`Eliminar "${p.nombre}"?`)) return;
+
+  state.productos=state.productos.filter(x=>x.id!==editingProductId);
+  cart.delete(editingProductId);
+  editingProductId=null;
+
+  renderAll();
+  $("dlgProduct").close();
+}
+
+function quickRestock(pid){
+  const p=getP(pid); if(!p) return;
+  const input=prompt(`Reponer "${p.nombre}". Cantidad a sumar:`,"10");
+  if(input===null) return;
+
+  const qty=Math.floor(Number(input));
+  if(!Number.isFinite(qty)||qty<=0) return alert("Cantidad inválida.");
+
+  p.stock+=qty;
+
+  ensureJ();
+  const j=state.jornadas[state.jornadaActual];
+  j.movimientos.push({
+    ts:new Date().toISOString(),
+    tipo:"Reposición",
+    productoId:p.id,
+    nombre:p.nombre,
+    cantidad:qty,
+    unit:0,
+    total:0,
+    grupo:"R-"+uid()
+  });
+
+  renderAll();
+}
+
+function printQr(){
+  const p=editingProductId?getP(editingProductId):null;
+  if(!p) return alert("Guardá el producto primero.");
+  const canvas=$("qrOut").querySelector("canvas");
+  if(!canvas) return alert("QR no disponible.");
+
+  const dataUrl=canvas.toDataURL("image/png");
+  const w=window.open("","_blank");
+  if(!w) return alert("Ventana bloqueada.");
+
+  w.document.write(`<html><head><title>Imprimir QR</title></head><body style="font-family:Arial;padding:20px">
+    <h2 style="margin:0 0 10px">${esc(p.nombre)}</h2>
+    <img src="${dataUrl}" style="width:220px;height:220px"/>
+    <p style="margin-top:10px;font-size:12px;color:#444">${esc($("qrText").textContent)}</p>
+    <script>window.onload=()=>window.print();<\/script>
+  </body></html>`);
+  w.document.close();
+}
+
+function handleScan(text){
+  if(!text || typeof text!=="string" || !text.startsWith("HELADO:")) return false;
+  const id=text.slice(7).trim();
+  const p=getP(id);
+  if(!p) return false;
+  addToCart(id,+1);
+  return true;
+}
+
+function openScanDialog(){
+  // Aviso útil si están en content://
+  if(location.protocol!=="https:" && location.protocol!=="http:" && location.protocol!=="file:" && location.protocol!=="localhost:"){
+    // nada, solo por si algún navegador raro
+  }
+  $("scanStatus").textContent="";
+  $("dlgScan").showModal();
+
+  if(!qrScanner) qrScanner=new Html5Qrcode("qrReader");
+
+  qrScanner.start(
+    {facingMode:"environment"},
+    {fps:10,qrbox:{width:260,height:260}},
+    (decoded)=>{
+      const ok=handleScan(decoded);
+      $("scanStatus").textContent = ok ? `Agregado: ${decoded}` : `QR no válido: ${decoded}`;
+      if(navigator.vibrate) navigator.vibrate(60);
+    },
+    ()=>{}
+  ).catch(err=>{
+    $("scanStatus").textContent =
+      "No se pudo iniciar cámara. Causas típicas: " +
+      "1) abrir como content:// o file:// 2) permiso cámara bloqueado 3) pop-up de permiso no aceptado. " +
+      "Error: " + err;
+  });
+}
+
+function closeScanDialog(){
+  if(qrScanner) qrScanner.stop().then(()=>qrScanner.clear()).catch(()=>{});
+  $("dlgScan").close();
+}
+
+function exportAll(){
+  downloadJSON(`helados-backup-${dateKey()}.json`,state);
+}
+
+async function importAllFromFile(file){
+  try{
+    const obj=await readJSONFile(file);
+    if(!obj || typeof obj!=="object" || !Array.isArray(obj.productos) || typeof obj.jornadas!=="object")
+      throw new Error("Estructura inválida");
+
+    state=obj;
+    state.jornadaActual??=dateKey();
+    state.productos??=[];
+    state.jornadas??={};
+    state.lastConfirmedGroupId??=null;
+
+    cart.clear();
+    viewDay=null;
+    ensureJ();
+    renderAll();
+    alert("Importación OK.");
+  }catch(e){
+    alert("No se pudo importar: "+(e?.message||e));
+  }
+}
+
+function exportCierrePDF(){
+  const day=viewDay||state.jornadaActual;
+  ensureJ(day);
+  const j=state.jornadas[day];
+  const mov=(j.movimientos||[]).filter(m=>m.tipo==="Venta");
+  const total=j.ventas;
+
+  // Resumen por producto
+  const map=new Map();
+  for(const m of mov){
+    const key=m.nombre;
+    const prev=map.get(key)||{nombre:key,qty:0,unit:m.unit,sub:0};
+    prev.qty+=m.cantidad;
+    prev.sub+=m.total;
+    map.set(key,prev);
+  }
+  const items=[...map.values()].sort((a,b)=>a.nombre.localeCompare(b.nombre,"es"));
+
+  const w=window.open("","_blank");
+  if(!w) return alert("Ventana bloqueada. Permití pop-ups para imprimir/guardar PDF.");
+
+  const rows = items.map(i=>`
+    <tr>
+      <td>${esc(i.nombre)}</td>
+      <td style="text-align:right">${i.qty}</td>
+      <td style="text-align:right">${fmt.format(i.unit)}</td>
+      <td style="text-align:right">${fmt.format(i.sub)}</td>
+    </tr>
+  `).join("");
+
+  w.document.write(`
+  <html><head><title>Cierre ${day}</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <style>
+    body{font-family:Arial, sans-serif; padding:24px; color:#111}
+    h1{margin:0 0 6px; font-size:20px}
+    .muted{color:#666; font-size:12px}
+    .box{border:1px solid #ddd; border-radius:10px; padding:14px; margin:14px 0}
+    table{width:100%; border-collapse:collapse; margin-top:10px}
+    th,td{border-bottom:1px solid #eee; padding:8px 6px; font-size:12px}
+    th{background:#fafafa; text-align:left}
+    .tot{font-size:14px; font-weight:700}
+    @media print { .noprint{display:none} }
+  </style></head>
+  <body>
+    <h1>Presupuesto / Cierre del día</h1>
+    <div class="muted">Día: <b>${day}</b> · Generado: ${new Date().toLocaleString("es-AR")}</div>
+
+    <div class="box">
+      <div class="tot">Total vendido: ${fmt.format(total)}</div>
+      <div class="muted">Detalle por producto</div>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Producto</th>
+            <th style="text-align:right">Cant</th>
+            <th style="text-align:right">Unit</th>
+            <th style="text-align:right">Subtotal</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows || `<tr><td colspan="4" class="muted">Sin ventas registradas en este día.</td></tr>`}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="muted">Firma: __________________________</div>
+
+    <button class="noprint"
+      onclick="window.print()"
+      style="padding:12px 14px;border:1px solid #111;border-radius:10px;background:#111;color:#fff;font-weight:700">
+      Imprimir / Guardar como PDF
+    </button>
+
+    <script>setTimeout(()=>window.print(), 250);<\/script>
+  </body></html>`);
+  w.document.close();
+}
+
+function resetAll(){
+  if(!confirm("Esto borra TODO. ¿Seguro?")) return;
+  localStorage.removeItem(KEY);
+  state=def();
+  cart.clear();
+  viewDay=null;
+  renderAll();
+}
+
+function newDay(){
+  const hoy=dateKey();
+  if(state.jornadaActual===hoy){
+    if(!confirm("Ya es la jornada de hoy. ¿Reiniciar SOLO el cierre (sin tocar stock)?")) return;
+    state.jornadas[state.jornadaActual]={ventas:0,costos:0,movimientos:[]};
+    state.lastConfirmedGroupId=null;
+    viewDay=state.jornadaActual;
+    renderAll();
+    return;
+  }
+  state.jornadaActual=hoy;
+  ensureJ();
+  state.lastConfirmedGroupId=null;
+  viewDay=state.jornadaActual;
+  renderAll();
+}
+
+// Eventos
+$("tabVenta").onclick=()=>nav("Venta");
+$("tabStock").onclick=()=>nav("Stock");
+$("tabCierre").onclick=()=>nav("Cierre");
+
+$("ventaFiltro").onchange=renderAll;
+$("ventaBuscar").oninput=renderAll;
+
+$("btnScan").onclick=openScanDialog;
+$("btnScanClose").onclick=closeScanDialog;
+
+$("btnUndo").onclick=()=>{ if(confirm("Deshacer la última venta confirmada?")) undoLast(); };
+$("btnConfirm").onclick=()=>{ if(confirm("Confirmar venta y descontar stock?")) confirmSale(); };
+$("btnCancel").onclick=()=>{ if(!cart.size) return; if(confirm("Cancelar pedido actual?")) cancelCart(); };
+
+$("btnAddProduct").onclick=()=>openProductDialog(null);
+$("btnProdCancel").onclick=()=>$("dlgProduct").close();
+$("btnProdSave").onclick=()=>saveProduct();
+$("btnProdDelete").onclick=()=>deleteProduct();
+
+$("pPhoto").onchange=async()=>{
+  const f=$("pPhoto").files && $("pPhoto").files[0];
+  if(!f) return;
+  const d=await fileToDataUrl(f);
+  $("pPreview").src=d;
+  $("pPreview").style.display="";
+};
+
+$("btnPrintQr").onclick=printQr;
+
+$("btnExportFile").onclick=exportAll;
+$("btnImportFile").onclick=()=>$("fileImport").click();
+$("fileImport").onchange=()=>{
+  const f=$("fileImport").files && $("fileImport").files[0];
+  $("fileImport").value="";
+  if(f) importAllFromFile(f);
+};
+
+$("btnReset").onclick=resetAll;
+
+$("btnNewDay").onclick=newDay;
+$("selDia").onchange=()=>{ viewDay=$("selDia").value; renderAll(); };
+$("btnExportCierre").onclick=exportCierrePDF;
+
+// Init
+ensureJ();
+viewDay=state.jornadaActual;
+renderAll();
+if(!state.productos.length) nav("Stock");
+
+})();
+</script>
+
+</body>
+</html>
